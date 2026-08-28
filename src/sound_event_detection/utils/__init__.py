@@ -1,3 +1,7 @@
+from sound_event_detection.utils.device import (
+    default_device,
+    resolve_device,
+)
 from sound_event_detection.utils.io_utils import (
     load_labels,
     load_state_dict_verbose,
@@ -19,6 +23,7 @@ from sound_event_detection.utils.reformatters import (
 )
 
 __all__ = [
+    "default_device",
     "detector_output_to_dataframe",
     "events_array_to_frames",
     "frames_to_dur",
@@ -30,6 +35,7 @@ __all__ = [
     "postprocess_frame_predictions",
     "postprocess_selection_table",
     "postprocess_selection_table_by_threshold",
+    "resolve_device",
     "selection_table_to_frames",
     "tempered_pooling",
 ]

@@ -16,13 +16,12 @@ selects the detector from a model-config file (``SED_MODEL_CONFIG``).
 
 Environment variables:
 
-- ``SED_DEVICE``  ``"cpu"`` or ``"cuda"`` for `load_frame_detector`
-  (default: cuda if available, else cpu).
+- ``SED_DEVICE``  torch device for `load_frame_detector` (e.g. ``"cpu"``,
+  ``"cuda"``, ``"mps"``); default: cuda, else mps, else cpu.
 """
 
 import base64
 import hashlib
-import os
 import subprocess
 import warnings
 from collections.abc import AsyncIterator, Callable
@@ -37,6 +36,7 @@ from pydantic import BaseModel
 from esp_research.checkpointing import load_checkpoint_dir
 from esp_research.protocols.detector import Detector
 from sound_event_detection.models.frame_detector import FrameDetector
+from sound_event_detection.utils.device import resolve_device
 
 
 class RunRequest(BaseModel):
@@ -153,16 +153,15 @@ def load_frame_detector(folder: str, device: str | None = None) -> Detector:
         Checkpoint directory containing ``manifest.json`` (passed to
         `load_checkpoint_dir`).
     device : str | None
-        Torch device (``"cpu"`` or ``"cuda"``). When ``None``, reads ``SED_DEVICE``
-        and falls back to cuda-if-available else cpu.
+        Torch device (e.g. ``"cpu"``, ``"cuda"``, ``"mps"``). When ``None``, reads
+        ``SED_DEVICE`` and falls back to `default_device`.
 
     Returns
     -------
     Detector
         The loaded model, in eval mode on `device`.
     """
-    if device is None:
-        device = os.environ.get("SED_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
+    device = resolve_device(device)
     return load_checkpoint_dir(folder).objects["model"].eval().to(device)
 
 
@@ -178,16 +177,15 @@ def load_frame_detector_from_hf(repo_id: str, revision: str | None = None, devic
         Git revision (branch, tag, or commit) to download. When ``None``, uses the
         repository's default branch.
     device : str | None
-        Torch device (``"cpu"`` or ``"cuda"``). When ``None``, reads ``SED_DEVICE``
-        and falls back to cuda-if-available else cpu.
+        Torch device (e.g. ``"cpu"``, ``"cuda"``, ``"mps"``). When ``None``, reads
+        ``SED_DEVICE`` and falls back to `default_device`.
 
     Returns
     -------
     Detector
         The loaded model, in eval mode on `device`.
     """
-    if device is None:
-        device = os.environ.get("SED_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
+    device = resolve_device(device)
     return FrameDetector.from_hf_hub(repo_id, revision=revision).eval().to(device)
 
 

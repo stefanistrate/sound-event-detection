@@ -38,6 +38,29 @@ _TOP_DB = 80
 _NORM_MEAN = -13.369
 _NORM_STD = 13.162
 
+# torch's MPS backend mishandles convolutions whose weight has more than 2**16
+# output channels -- exactly the regime the prototype layer runs in, since it
+# convolves with one channel per prototype (188,440 for BirdCODE). Upstream:
+#
+#   https://github.com/pytorch/pytorch/issues/129207  original find (conv1d)
+#   https://github.com/pytorch/pytorch/issues/142836  conv2d regression, open,
+#       labelled "correctness (silent)"; reintroduced for macOS >= 15.1 by
+#       https://github.com/pytorch/pytorch/pull/140726
+#   https://github.com/pytorch/pytorch/issues/142515  why the guard stops
+#       firing: it checks every output dim, not just out_channels
+#
+# The symptom is version- and OS-dependent: some builds raise
+# NotImplementedError (pytorch/pytorch#144445, #152278), others silently return
+# garbage. On torch 2.11 / macOS 15 here it is silent, and also needs a
+# non-trivial spatial extent -- 200,000 channels over a 2x3 output is fine while
+# 70,000 over 4x4 is not, consistent with the too-broad guard in #142515.
+#
+# Upstream suggests PYTORCH_ENABLE_MPS_FALLBACK, which moves the whole op to the
+# CPU. Chunking below the limit is ours: it keeps the work on the GPU and is
+# bit-identical to the CPU result. See tests/unittests/test_device.py, whose MPS
+# case fails once plain conv2d stops misbehaving and this can be dropped.
+_MPS_CONV_OUT_CHANNEL_LIMIT = 65_536
+
 # ── Mel spectrogram (matching AudioProtoNetFeatureExtractor exactly) ──────
 
 
@@ -75,6 +98,36 @@ class _MelSpectrogramTransform(nn.Module):
 
 
 # ── Cosine activation (matching ppnet.py / modeling_protonet.py exactly) ──
+
+
+def _chunked_conv2d(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    """Convolve `x` with `weight`, working around the MPS output-channel limit.
+
+    On every backend except MPS this is a plain `F.conv2d`. On MPS the weight is
+    split along its output-channel axis so no single call exceeds
+    `_MPS_CONV_OUT_CHANNEL_LIMIT`; the concatenated result is bit-identical to
+    the CPU one. See that constant for the upstream torch bug this dodges.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input, shape ``[B, C, H, W]``.
+    weight : torch.Tensor
+        Convolution weight, shape ``[out_channels, C, kH, kW]``.
+
+    Returns
+    -------
+    torch.Tensor
+        Convolution result, shape ``[B, out_channels, H', W']``.
+    """
+    out_channels = weight.shape[0]
+    if x.device.type != "mps" or out_channels <= _MPS_CONV_OUT_CHANNEL_LIMIT:
+        return F.conv2d(x, weight)
+    chunks = [
+        F.conv2d(x, weight[start : start + _MPS_CONV_OUT_CHANNEL_LIMIT])
+        for start in range(0, out_channels, _MPS_CONV_OUT_CHANNEL_LIMIT)
+    ]
+    return torch.cat(chunks, dim=1)
 
 
 def _cosine_activation(
@@ -132,7 +185,7 @@ def _cosine_activation(
     normalized_protos = normalized_protos / normalizing_factor
 
     # Cosine similarity via conv2d
-    activations = F.conv2d(x_normalized, normalized_protos)
+    activations = _chunked_conv2d(x_normalized, normalized_protos)
     activations = activations / (input_vector_length * 1.01)
 
     # ReLU (relu_on_cos=True in config)

@@ -22,11 +22,11 @@ Deploy with::
 
 Environment variables:
 
-- ``SED_DEVICE``  ``"cpu"`` or ``"cuda"`` (default: cuda if available, else cpu).
+- ``SED_DEVICE``  torch device, e.g. ``"cpu"``, ``"cuda"``, ``"mps"``
+  (default: cuda, else mps, else cpu).
 """
 
 import base64
-import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
@@ -34,6 +34,8 @@ import numpy as np
 import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+
+from sound_event_detection.utils.device import resolve_device
 
 MODEL_NAME = "esp_aves2_sl_beats_all"
 SAMPLE_RATE = 16000
@@ -96,7 +98,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        device = torch.device(os.environ.get("SED_DEVICE", "cuda" if torch.cuda.is_available() else "cpu"))
+        device = torch.device(resolve_device())
 
         if model is not None:
             app.state.model = model

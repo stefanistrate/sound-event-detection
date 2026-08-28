@@ -16,6 +16,8 @@ Required packages are listed in `pyproject.toml`. To install them, run:
 uv sync --group gpu   # omit --group gpu for CPU-only
 ```
 
+`--group gpu` installs the CUDA wheels and only applies on Linux. On an Apple Silicon Mac use the plain `uv sync`: the default wheels already include Metal (MPS) support, so the GPU is used without that group.
+
 All commands run through `uv run`. It may be necessary to include `--group gpu` if using a GPU. Evaluation and LSI also need the dataset storage referenced by `configs/data/*.yml`.
 
 Large-scale inference and using precomputed selection tables both require [`alp-data`](https://github.com/earthspecies/alp-data/), which is already included in `pyproject.toml`.
@@ -35,6 +37,8 @@ uv run sed-folder --folder tests/samples/demo/audio
 ```
 
 This writes `tests/samples/demo/audio/BirdCODE_predictions/{20230730,20260623}.txt`, which should match the tables in `tests/samples/demo/output_expected/`. On CPU it takes roughly 1.5 minutes after the model weights (~1.1 GB) are downloaded.
+
+The best available device is picked automatically (cuda, else mps on Apple Silicon, else cpu); override it with `--device`. Scores can differ from CPU in the last decimal place on either GPU backend, so pin `--device cpu` if you need byte-identical tables.
 
 Postprocessing is applied: By default, per-frame detections are thresholded at 0.5, boxes with the same label are merged if separated by less than 1 second, and non-maximal suppression is applied with an IoU threshold of 0.8. Geography filtering is off by default; enable it with `--geo-filter`, a directory of `*.gpkg` range maps, and the recording site's coordinates (applied to every file):
 
@@ -72,7 +76,7 @@ Every CLI has a `describe` subcommand that prints its config schema(s), e.g. `uv
 from sound_event_detection.models import FrameDetector
 
 # From the HuggingFace Hub (downloads the snapshot, then rebuilds the model);
-birdcode = FrameDetector.from_hf_hub("EarthSpeciesProject/sed-birdcode").eval().to("cuda")
+birdcode = FrameDetector.from_hf_hub("EarthSpeciesProject/sed-birdcode").eval().to("cuda")  # or "mps" on Apple Silicon
 
 # Or from a checkpoint directory: weights from best_model.pt, labels from
 # labels.txt, architecture from config.yaml.
@@ -111,7 +115,7 @@ SED_MODEL_CONFIG=configs/birdcode/models/birdcode_esp_research.yml \
     uv run sed-server --host 0.0.0.0 --port 8100
 ```
 
-`sed-server` accepts `--host` (default `localhost`), `--port` (default `8100`), `--workers`, `--reload`, and `--log-level`. `SED_DEVICE=cpu|cuda` selects the device (default: cuda if available).
+`sed-server` accepts `--host` (default `localhost`), `--port` (default `8100`), `--workers`, `--reload`, and `--log-level`. `SED_DEVICE=cpu|cuda|mps` selects the device (default: cuda if available, else mps on Apple Silicon, else cpu).
 
 Ablation checkpoints use the same `type: frame` shape:
 `configs/birdcode/models/ablations/`.

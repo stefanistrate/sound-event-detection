@@ -37,7 +37,8 @@ Deploy with::
 Environment variables:
 
 - ``SED_MODEL_CONFIG``  path to the model-config YAML (required).
-- ``SED_DEVICE``        ``"cpu"`` or ``"cuda"`` for ``type: frame`` (default: cuda if available).
+- ``SED_DEVICE``        torch device for ``type: frame``, e.g. ``"cpu"``, ``"cuda"``,
+                        ``"mps"`` (default: cuda, else mps, else cpu).
 """
 
 import os

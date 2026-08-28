@@ -39,7 +39,6 @@ from pathlib import Path
 import click
 import librosa
 import numpy as np
-import torch
 from alp_data.io import audio_stereo_to_mono, read_audio
 
 from esp_research.logging import logger
@@ -50,6 +49,7 @@ from sound_event_detection.inference.lsi_postprocess_cli import (
     postprocess_and_convert_detector_output_to_selection_table,
 )
 from sound_event_detection.models import FrameDetector
+from sound_event_detection.utils.device import default_device
 
 __all__ = ["cli"]
 
@@ -139,7 +139,7 @@ def _run_on_folder(
     revision : str or None
         Optional Hub revision (branch, tag, or commit) to pin.
     device : str
-        Torch device to run inference on (e.g. ``"cuda"`` or ``"cpu"``).
+        Torch device to run inference on (e.g. ``"cuda"``, ``"mps"``, or ``"cpu"``).
     overlap : float
         Window overlap fraction forwarded to `FrameDetector.run` (``0`` disables).
     threshold : float
@@ -246,7 +246,7 @@ def _run_on_folder(
 @click.option("--revision", default=None, help="Optional Hub revision (branch, tag, or commit) to pin.")
 @click.option(
     "--device",
-    default="cuda" if torch.cuda.is_available() else "cpu",
+    default=default_device(),
     show_default=True,
     help="Torch device for inference.",
 )
